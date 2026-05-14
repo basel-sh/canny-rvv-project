@@ -1,0 +1,4 @@
+rvv_test
+*.o
+*.out
+*.elf
