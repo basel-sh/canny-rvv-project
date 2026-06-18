@@ -1,7 +1,7 @@
 RISCV_PREFIX  ?= riscv64-unknown-elf-
 RISCV_CXX     := $(RISCV_PREFIX)g++
 HOST_CXX      := g++
-QEMU          := /home/basel/rvv/qemu/build/qemu-riscv64
+QEMU          := /usr/local/bin/qemu-riscv64
 QEMU_SYSROOT  := 
 QEMU_BASE     := $(QEMU)
 BUILD_DIR     := build
@@ -15,10 +15,11 @@ GTEST_LIBS    := -L/usr/local/lib -lgtest -lgtest_main -lpthread
 
 # --- Phase 4 Optimization Flags ---
 RV_FLAGS_O0       := $(ARCH_FLAGS) -O0 -std=c++17 -Wall
+RV_FLAGS_O2       := $(ARCH_FLAGS) -O2 -std=c++17 -Wall
 RV_FLAGS_O3       := $(ARCH_FLAGS) -O3 -std=c++17 -Wall
 RV_FLAGS_AUTO_VEC := $(ARCH_FLAGS) -O3 -ftree-vectorize -fopt-info-vec-all -std=c++17 -Wall
 
-.PHONY: all clean verify verify128 verify256 verify512 verify-all test help canny_rv run
+.PHONY: all clean verify verify128 verify256 verify512 verify-all test help canny_rv run sweep_O0 sweep_O2 sweep_O3 sweep_autovec
 
 all: verify-all
 
@@ -45,12 +46,43 @@ test: | $(BUILD_DIR)
 	$(HOST_CXX) $(HOST_FLAGS) $(GTEST_INC) tests/*.cpp $(GTEST_LIBS) -o $(BUILD_DIR)/host_test
 	./$(BUILD_DIR)/host_test
 
-# --- New Phase 4 Targets ---
+# --- Standard Build/Run (Default to O3 for Phase 4) ---
 canny_rv: | $(BUILD_DIR)
-	$(RISCV_CXX) $(RV_FLAGS_O3) src/Phase_2.cpp -o $(BUILD_DIR)/canny_rv
+	$(RISCV_CXX) $(RV_FLAGS_O3) src/Phase_4.cpp -o $(BUILD_DIR)/canny_rv
 
 run: canny_rv
 	$(QEMU_BASE) -cpu rv64,v=true,vlen=128,elen=64 ./$(BUILD_DIR)/canny_rv
+
+# --- Phase 4 Optimization Sweep Targets ---
+sweep_O0: | $(BUILD_DIR)
+	$(RISCV_CXX) $(RV_FLAGS_O0) src/Phase_4.cpp -o $(BUILD_DIR)/canny_O0
+	@echo "--- O0 Binary Size ---"
+	@ls -lh $(BUILD_DIR)/canny_O0
+	@echo "--- Running O0 Benchmark ---"
+	$(QEMU_BASE) -cpu rv64,v=true,vlen=128,elen=64 ./$(BUILD_DIR)/canny_O0
+
+sweep_O2: | $(BUILD_DIR)
+	$(RISCV_CXX) $(RV_FLAGS_O2) src/Phase_4.cpp -o $(BUILD_DIR)/canny_O2
+	@echo "--- O2 Binary Size ---"
+	@ls -lh $(BUILD_DIR)/canny_O2
+	@echo "--- Running O2 Benchmark ---"
+	$(QEMU_BASE) -cpu rv64,v=true,vlen=128,elen=64 ./$(BUILD_DIR)/canny_O2
+
+sweep_O3: | $(BUILD_DIR)
+	$(RISCV_CXX) $(RV_FLAGS_O3) src/Phase_4.cpp -o $(BUILD_DIR)/canny_O3
+	@echo "--- O3 Binary Size ---"
+	@ls -lh $(BUILD_DIR)/canny_O3
+	@echo "--- Running O3 Benchmark ---"
+	$(QEMU_BASE) -cpu rv64,v=true,vlen=128,elen=64 ./$(BUILD_DIR)/canny_O3
+
+sweep_autovec: | $(BUILD_DIR)
+	$(RISCV_CXX) $(RV_FLAGS_AUTO_VEC) src/Phase_4.cpp -o $(BUILD_DIR)/canny_autovec
+	@echo "--- Auto-Vectorized Binary Size ---"
+	@ls -lh $(BUILD_DIR)/canny_autovec
+	@echo "--- Auto-Vectorization Instruction Count ---"
+	@riscv64-unknown-elf-objdump -d $(BUILD_DIR)/canny_autovec | grep -c vset || echo "0 (No vector instructions generated)"
+	@echo "--- Running Auto-Vec Benchmark ---"
+	$(QEMU_BASE) -cpu rv64,v=true,vlen=128,elen=64 ./$(BUILD_DIR)/canny_autovec
 
 clean:
 	rm -rf $(BUILD_DIR)
