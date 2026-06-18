@@ -22,9 +22,9 @@ def convert_raw_to_png(raw_filename, png_filename):
 print("--- Generating Edge Maps ---")
 
 # Process the L1 (Manhattan Distance) Output
-convert_raw_to_png("output_magnitude_L1.raw", "final_edges_L1.png")
+convert_raw_to_png("../Results/output_magnitude_L1.raw", "../Results/final_edges_L1.png")
 
 # Process the L2 (Euclidean Distance) Output
-convert_raw_to_png("output_magnitude_L2.raw", "final_edges_L2.png")
+convert_raw_to_png("../Results/output_magnitude_L2.raw", "../Results/final_edges_L2.png")
 
 print("--- Done ---")
