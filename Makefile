@@ -1,9 +1,9 @@
-RISCV_PREFIX  ?= riscv64-unknown-linux-gnu-
+RISCV_PREFIX  ?= riscv64-unknown-elf-
 RISCV_CXX     := $(RISCV_PREFIX)g++
 HOST_CXX      := g++
-QEMU          := qemu-riscv64
-QEMU_SYSROOT  := /opt/riscv/sysroot
-QEMU_BASE     := $(QEMU) -L $(QEMU_SYSROOT)
+QEMU          := /home/basel/rvv/qemu/build/qemu-riscv64
+QEMU_SYSROOT  := 
+QEMU_BASE     := $(QEMU)
 BUILD_DIR     := build
 SCRIPTS_DIR   := scripts
 ARCH_FLAGS    := -march=rv64gcv -mabi=lp64d

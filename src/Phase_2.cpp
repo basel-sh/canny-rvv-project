@@ -106,7 +106,7 @@ int main() {
     cout << "--- Canny Edge Detection: Phase 2 Scalar Baseline ---" << endl;
 
     // 1. Read the image (Using relative paths so QEMU doesn't get lost)
-    if (!readRawImage("test_image.raw", input_img, width, height)) {
+    if (!readRawImage("Results/test_image.raw", input_img, width, height)) {
         cerr << "Error: Could not open test_image.raw. Make sure the file is in this folder!" << endl;
         return 1;
     }
