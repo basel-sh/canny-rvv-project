@@ -1,175 +1,141 @@
+
 #include <iostream>
 #include <vector>
 #include <cstdint>
 #include <cmath>
-#include <cstdio>  // Dropping down to pure C standard I/O for emulator stability
-#include <ctime>   // Added for clock_gettime
-
+#include <cstdio>
+#include <cstring>
+#include <sys/time.h>
 using namespace std;
 
-// --- Helper Functions for File I/O (Pure C) ---
-bool readRawImage(const string& filename, vector<uint8_t>& image, int width, int height) {
-    FILE* file = fopen(filename.c_str(), "rb");
-    if (!file) {
-        perror("KERNEL READ ERROR"); // Forces Linux to tell us exactly why it failed
-        return false;
-    }
-    fread(image.data(), 1, width * height, file);
-    fclose(file);
-    return true;
+static double elapsed_ms(struct timeval s, struct timeval e) {
+    return (e.tv_sec-s.tv_sec)*1000.0 + (e.tv_usec-s.tv_usec)/1000.0;
 }
 
-bool writeRawImage(const string& filename, const vector<uint8_t>& image, int width, int height) {
-    FILE* file = fopen(filename.c_str(), "wb");
-    if (!file) {
-        perror("KERNEL WRITE ERROR");
-        return false;
-    }
-    fwrite(image.data(), 1, width * height, file);
-    fclose(file);
-    return true;
-}
-
-// --- Helper Function for Timing ---
-double get_elapsed_ms(struct timespec start, struct timespec end) {
-    return (end.tv_sec - start.tv_sec) * 1000.0 + (end.tv_nsec - start.tv_nsec) / 1000000.0;
-}
-
-// --- Stage 1: Gaussian Blur (Templated for Phase 2 Compliance) ---
 template <typename PixelType, typename AccumulatorType>
 void applyGaussianBlur(const vector<PixelType>& input, vector<PixelType>& output, int width, int height) {
     const int kernel[5][5] = {
-        {1, 4, 7, 4, 1},
-        {4, 16, 26, 16, 4},
-        {7, 26, 41, 26, 7},
-        {4, 16, 26, 16, 4},
-        {1, 4, 7, 4, 1}
+        {1,4,7,4,1},{4,16,26,16,4},{7,26,41,26,7},{4,16,26,16,4},{1,4,7,4,1}
     };
     const AccumulatorType kernel_sum = 273;
-
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            AccumulatorType sum = 0;
-            for (int ky = -2; ky <= 2; ky++) {
-                for (int kx = -2; kx <= 2; kx++) {
-                    int ny = y + ky;
-                    int nx = x + kx;
-                    if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
-                        AccumulatorType pixel_val = input[ny * width + nx];
-                        sum += pixel_val * kernel[ky + 2][kx + 2];
-                    }
+    for (int y=0; y<height; y++) {
+        for (int x=0; x<width; x++) {
+            AccumulatorType sum=0;
+            for (int ky=-2; ky<=2; ky++) {
+                for (int kx=-2; kx<=2; kx++) {
+                    int ny=y+ky, nx=x+kx;
+                    if (ny>=0&&ny<height&&nx>=0&&nx<width)
+                        sum+=(AccumulatorType)input[ny*width+nx]*kernel[ky+2][kx+2];
                 }
             }
-            output[y * width + x] = static_cast<PixelType>(sum / kernel_sum);
+            output[y*width+x]=(PixelType)(sum/kernel_sum);
         }
     }
 }
 
-// --- Stage 2 & 3: Sobel, Magnitude, and Direction ---
-// Added 'use_l2_norm' flag to satisfy Phase 2 requirements
-void applySobelAndMagnitude(const vector<uint8_t>& blurred, vector<uint8_t>& magnitude_out, vector<uint8_t>& direction_out, int width, int height, bool use_l2_norm = false) {
-    const int Kx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
-    const int Ky[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
-
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            int32_t gx = 0;
-            int32_t gy = 0;
-
-            for (int ky = -1; ky <= 1; ky++) {
-                for (int kx = -1; kx <= 1; kx++) {
-                    int ny = y + ky;
-                    int nx = x + kx;
-                    int pixel_val = (ny >= 0 && ny < height && nx >= 0 && nx < width) ? blurred[ny * width + nx] : 0;
-                    
-                    gx += pixel_val * Kx[ky + 1][kx + 1];
-                    gy += pixel_val * Ky[ky + 1][kx + 1];
+void applySobel(const vector<uint8_t>& blurred, vector<int16_t>& Gx, vector<int16_t>& Gy, int width, int height) {
+    const int Kx[3][3]={{-1,0,1},{-2,0,2},{-1,0,1}};
+    const int Ky[3][3]={{-1,-2,-1},{0,0,0},{1,2,1}};
+    for (int y=0; y<height; y++) {
+        for (int x=0; x<width; x++) {
+            int32_t gx=0,gy=0;
+            for (int ky=-1; ky<=1; ky++) {
+                for (int kx=-1; kx<=1; kx++) {
+                    int ny=y+ky,nx=x+kx;
+                    int pv=(ny>=0&&ny<height&&nx>=0&&nx<width)?blurred[ny*width+nx]:0;
+                    gx+=pv*Kx[ky+1][kx+1];
+                    gy+=pv*Ky[ky+1][kx+1];
                 }
             }
-
-            // --- THE PHASE 2 L1/L2 MAGNITUDE FIX ---
-            int32_t mag = 0;
-            if (use_l2_norm) {
-                // L2 Norm: Euclidean distance (More accurate, but square roots are slow on hardware)
-                mag = static_cast<int32_t>(std::round(std::sqrt(gx * gx + gy * gy)));
-            } else {
-                // L1 Norm: Manhattan distance (Fast absolute addition)
-                mag = abs(gx) + abs(gy);
-            }
-            
-            magnitude_out[y * width + x] = static_cast<uint8_t>(mag > 255 ? 255 : mag);
-
-            uint8_t angle = 0;
-            if (mag != 0) {
-                int32_t abs_gx = abs(gx);
-                int32_t abs_gy = abs(gy);
-
-                if (abs_gy * 1000 <= 414 * abs_gx) angle = 0; 
-                else if (abs_gy * 1000 >= 2414 * abs_gx) angle = 90; 
-                else if ((gx > 0 && gy > 0) || (gx < 0 && gy < 0)) angle = 135; 
-                else angle = 45;
-            }
-            direction_out[y * width + x] = angle;
+            Gx[y*width+x]=(int16_t)gx;
+            Gy[y*width+x]=(int16_t)gy;
         }
     }
 }
 
-// --- Main Execution (Phase 4 Timing) ---
+void computeMagnitude(const vector<int16_t>& Gx, const vector<int16_t>& Gy, vector<uint8_t>& mag, int width, int height) {
+    for (int i=0; i<width*height; i++) {
+        int32_t m=abs((int32_t)Gx[i])+abs((int32_t)Gy[i]);
+        mag[i]=(uint8_t)(m>255?255:m);
+    }
+}
+
+void computeDirection(const vector<int16_t>& Gx, const vector<int16_t>& Gy, vector<uint8_t>& dir, int width, int height) {
+    for (int i=0; i<width*height; i++) {
+        int32_t ax=abs((int32_t)Gx[i]),ay=abs((int32_t)Gy[i]);
+        uint8_t angle=0;
+        if (ax!=0||ay!=0) {
+            if      (ay*5<ax*2)  angle=0;
+            else if (ay*5>ax*12) angle=2;
+            else if ((Gx[i]>0&&Gy[i]>0)||(Gx[i]<0&&Gy[i]<0)) angle=3;
+            else angle=1;
+        }
+        dir[i]=angle;
+    }
+}
+
+static bool readRaw(const char* path, vector<uint8_t>& buf, int w, int h) {
+    FILE* f=fopen(path,"rb");
+    if(!f){perror(path);return false;}
+    fread(buf.data(),1,(size_t)w*h,f);
+    fclose(f);
+    return true;
+}
+
+static void writeRaw(const char* path, const vector<uint8_t>& buf, int w, int h) {
+    FILE* f=fopen(path,"wb");
+    if(!f){perror(path);return;}
+    fwrite(buf.data(),1,(size_t)w*h,f);
+    fclose(f);
+}
+
 int main() {
-    const int width = 512;
-    const int height = 512;
-    const size_t img_size = width * height;
+    const int WIDTH=512,HEIGHT=512,N=WIDTH*HEIGHT,ITERS=100;
+    vector<uint8_t> input(N),blurred(N),mag(N),dir(N);
+    vector<int16_t> Gx(N),Gy(N);
 
-    vector<uint8_t> input_img(img_size);
-    vector<uint8_t> blurred_img(img_size);
-    vector<uint8_t> mag_img_L1(img_size);
-    vector<uint8_t> dir_img_L1(img_size);
-    vector<uint8_t> mag_img_L2(img_size);
-    vector<uint8_t> dir_img_L2(img_size);
+    printf("=== Phase 4: Compiler Optimization Sweep ===\n");
+    printf("Image: %dx%d   Iterations: %d\n\n",WIDTH,HEIGHT,ITERS);
 
-    cout << "--- Canny Edge Detection: Phase 4 Compiler Optimization Sweep ---" << endl;
-
-    if (!readRawImage("../Results/test_image.raw", input_img, width, height)) {
-        cerr << "Program Halt: Initialization Failed." << endl;
-        return 1;
+    if(!readRaw("../Results/test_image.raw",input,WIDTH,HEIGHT)) {
+        printf("Using synthetic gradient image.\n");
+        for(int y=0;y<HEIGHT;y++)
+            for(int x=0;x<WIDTH;x++)
+                input[y*WIDTH+x]=(uint8_t)((x+y)%256);
     }
-    cout << "Loaded image successfully from Results folder." << endl;
 
-    // Phase 4 Timing Setup
-    int iterations = 100;
-    struct timespec start_time, end_time;
+    struct timeval t0,t1;
+    double tg,ts,tm,td;
 
-    // --- Time Gaussian Blur ---
-    clock_gettime(CLOCK_MONOTONIC, &start_time);
-    for(int i = 0; i < iterations; i++) {
-        applyGaussianBlur<uint8_t, int32_t>(input_img, blurred_img, width, height);
-    }
-    clock_gettime(CLOCK_MONOTONIC, &end_time);
-    double gauss_time = get_elapsed_ms(start_time, end_time) / iterations;
-    cout << "Gaussian Blur (avg over " << iterations << "): " << gauss_time << " ms" << endl;
-    
-    // --- Time Sobel Gradients (L1 Norm) ---
-    clock_gettime(CLOCK_MONOTONIC, &start_time);
-    for(int i = 0; i < iterations; i++) {
-        applySobelAndMagnitude(blurred_img, mag_img_L1, dir_img_L1, width, height, false);
-    }
-    clock_gettime(CLOCK_MONOTONIC, &end_time);
-    double sobel_l1_time = get_elapsed_ms(start_time, end_time) / iterations;
-    cout << "Sobel Gradients L1 (avg over " << iterations << "): " << sobel_l1_time << " ms" << endl;
+    gettimeofday(&t0,0);
+    for(int i=0;i<ITERS;i++) applyGaussianBlur<uint8_t,int32_t>(input,blurred,WIDTH,HEIGHT);
+    gettimeofday(&t1,0); tg=elapsed_ms(t0,t1)/ITERS;
 
-    writeRawImage("../Results/output_magnitude_L1.raw", mag_img_L1, width, height);
-    
-    // --- Time Sobel Gradients (L2 Norm) ---
-    clock_gettime(CLOCK_MONOTONIC, &start_time);
-    for(int i = 0; i < iterations; i++) {
-        applySobelAndMagnitude(blurred_img, mag_img_L2, dir_img_L2, width, height, true);
-    }
-    clock_gettime(CLOCK_MONOTONIC, &end_time);
-    double sobel_l2_time = get_elapsed_ms(start_time, end_time) / iterations;
-    cout << "Sobel Gradients L2 (avg over " << iterations << "): " << sobel_l2_time << " ms" << endl;
+    gettimeofday(&t0,0);
+    for(int i=0;i<ITERS;i++) applySobel(blurred,Gx,Gy,WIDTH,HEIGHT);
+    gettimeofday(&t1,0); ts=elapsed_ms(t0,t1)/ITERS;
 
-    writeRawImage("../Results/output_magnitude_L2.raw", mag_img_L2, width, height);
+    gettimeofday(&t0,0);
+    for(int i=0;i<ITERS;i++) computeMagnitude(Gx,Gy,mag,WIDTH,HEIGHT);
+    gettimeofday(&t1,0); tm=elapsed_ms(t0,t1)/ITERS;
 
-    cout << "Pipeline complete. Both L1 and L2 outputs saved to Results folder!" << endl;
+    gettimeofday(&t0,0);
+    for(int i=0;i<ITERS;i++) computeDirection(Gx,Gy,dir,WIDTH,HEIGHT);
+    gettimeofday(&t1,0); td=elapsed_ms(t0,t1)/ITERS;
+
+    writeRaw("../Results/output_magnitude_phase4.raw",mag,WIDTH,HEIGHT);
+    writeRaw("../Results/output_direction_phase4.raw",dir,WIDTH,HEIGHT);
+
+    double total=tg+ts+tm+td;
+    printf("+-----------------------+----------+-----------+\n");
+    printf("|  Stage                |  ms/iter |  %%total   |\n");
+    printf("+-----------------------+----------+-----------+\n");
+    printf("|  Gaussian 5x5         | %8.3f |  %6.1f%%  |\n",tg,100.0*tg/total);
+    printf("|  Sobel Gx/Gy          | %8.3f |  %6.1f%%  |\n",ts,100.0*ts/total);
+    printf("|  Magnitude (L1)       | %8.3f |  %6.1f%%  |\n",tm,100.0*tm/total);
+    printf("|  Direction            | %8.3f |  %6.1f%%  |\n",td,100.0*td/total);
+    printf("+-----------------------+----------+-----------+\n");
+    printf("|  TOTAL                | %8.3f |  100.0%%   |\n",total);
+    printf("+-----------------------+----------+-----------+\n");
     return 0;
 }
