@@ -13,7 +13,12 @@ HOST_FLAGS    := $(OPT) -std=c++17 -Wall
 GTEST_INC     := -I/usr/local/include
 GTEST_LIBS    := -L/usr/local/lib -lgtest -lgtest_main -lpthread
 
-.PHONY: all clean verify verify128 verify256 verify512 verify-all test help
+# --- Phase 4 Optimization Flags ---
+RV_FLAGS_O0       := $(ARCH_FLAGS) -O0 -std=c++17 -Wall
+RV_FLAGS_O3       := $(ARCH_FLAGS) -O3 -std=c++17 -Wall
+RV_FLAGS_AUTO_VEC := $(ARCH_FLAGS) -O3 -ftree-vectorize -fopt-info-vec-all -std=c++17 -Wall
+
+.PHONY: all clean verify verify128 verify256 verify512 verify-all test help canny_rv run
 
 all: verify-all
 
@@ -40,10 +45,19 @@ test: | $(BUILD_DIR)
 	$(HOST_CXX) $(HOST_FLAGS) $(GTEST_INC) tests/*.cpp $(GTEST_LIBS) -o $(BUILD_DIR)/host_test
 	./$(BUILD_DIR)/host_test
 
+# --- New Phase 4 Targets ---
+canny_rv: | $(BUILD_DIR)
+	$(RISCV_CXX) $(RV_FLAGS_O3) src/Phase_2.cpp -o $(BUILD_DIR)/canny_rv
+
+run: canny_rv
+	$(QEMU_BASE) -cpu rv64,v=true,vlen=128,elen=64 ./$(BUILD_DIR)/canny_rv
+
 clean:
 	rm -rf $(BUILD_DIR)
 
 help:
 	@echo "make verify-all - Run RVV test at VLEN 128, 256, 512"
 	@echo "make test       - Run GoogleTest host native"
+	@echo "make canny_rv   - Compile the Canny pipeline for RISC-V"
+	@echo "make run        - Execute the RISC-V Canny pipeline on QEMU"
 	@echo "make clean      - Remove build files"
