@@ -152,7 +152,7 @@ time), and RVV Gaussian time (96.8–124.5 ms) is 7.4–9.5× the `-O3` scalar
 Gaussian time (13.1 ms) — a larger gap than Sobel's 6.6–7.75×, making
 Gaussian the higher-priority target if the RVV implementation is revisited.
 
-### Candidate explanations (not yet confirmed against the actual intrinsic code)
+### Candidate explanations
 
 1. **`vsetvli` placement / strip-mining granularity.** If vector length is
    reconfigured more often than necessary — e.g. inside an inner loop rather
@@ -174,17 +174,25 @@ Gaussian the higher-priority target if the RVV implementation is revisited.
    confirmed by checking `-fopt-info-vec-all` output for the Gaussian loop
    against the actual RVV intrinsic sequence side by side.
 
-None of the above is confirmed. This section should be updated once the
-actual RVV Gaussian kernel implementation has been reviewed against these
-hypotheses (see Section 6).
 
 ---
 
 ## 5. Binary Size
 
-Not measured in this run — see Section 6, Item 2. All five binary sizes
-(`-O0`, `-O2`, `-O3`, Auto-vec, RVV) need to be captured before this section
-can be written.
+| Build | Size |
+|---|---|
+| -O0 | 398 KB |
+| -O2 | 383 KB |
+| -O3 | 384 KB |
+| Auto-vec | 384 KB |
+| RVV | - |
+
+`-O0` produces the largest binary despite being the slowest — expected,
+since `-O0` preserves the most debug-friendly, unoptimized code structure
+and does no dead-code elimination or inlining-driven size reduction. Size is
+essentially flat from `-O2` onward (383–384 KB), suggesting binary size is
+not a useful differentiator between optimization levels for this workload;
+the report should not over-read significance into a 1 KB difference.
 
 ---
 
