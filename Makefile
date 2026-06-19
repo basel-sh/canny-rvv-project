@@ -1,7 +1,7 @@
 RISCV_PREFIX  ?= riscv64-unknown-elf-
 RISCV_CXX     := $(RISCV_PREFIX)g++
 HOST_CXX      := g++
-QEMU          := /usr/local/bin/qemu-riscv64
+QEMU          := /home/youssef_abdelaty/qemu/build/qemu-riscv64
 QEMU_SYSROOT  := 
 QEMU_BASE     := $(QEMU)
 BUILD_DIR     := build
