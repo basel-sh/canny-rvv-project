@@ -2,3 +2,5 @@ rvv_test
 *.o
 *.out
 *.elf
+build/
+*.raw
