@@ -1,37 +1,35 @@
 #include <iostream>
-#include <vector>
 #include <cstdint>
 #include <cmath>
-#include <cstdio>  // Dropping down to pure C standard I/O for emulator stability
+#include <cstdio>
+#include <cstdlib>
 
 using namespace std;
 
-// --- Helper Functions for File I/O (Pure C) ---
-bool readRawImage(const string& filename, vector<uint8_t>& image, int width, int height) {
+bool readRawImage(const string& filename, uint8_t* image, int width, int height) {
     FILE* file = fopen(filename.c_str(), "rb");
     if (!file) {
-        perror("KERNEL READ ERROR"); // Forces Linux to tell us exactly why it failed
+        perror("KERNEL READ ERROR");
         return false;
     }
-    fread(image.data(), 1, width * height, file);
+    fread(image, 1, width * height, file);
     fclose(file);
     return true;
 }
 
-bool writeRawImage(const string& filename, const vector<uint8_t>& image, int width, int height) {
+bool writeRawImage(const string& filename, const uint8_t* image, int width, int height) {
     FILE* file = fopen(filename.c_str(), "wb");
     if (!file) {
         perror("KERNEL WRITE ERROR");
         return false;
     }
-    fwrite(image.data(), 1, width * height, file);
+    fwrite(image, 1, width * height, file);
     fclose(file);
     return true;
 }
 
-// --- Stage 1: Gaussian Blur (Templated for Phase 2 Compliance) ---
 template <typename PixelType, typename AccumulatorType>
-void applyGaussianBlur(const vector<PixelType>& input, vector<PixelType>& output, int width, int height) {
+void applyGaussianBlur(const PixelType* input, PixelType* output, int width, int height) {
     const int kernel[5][5] = {
         {1, 4, 7, 4, 1},
         {4, 16, 26, 16, 4},
@@ -59,9 +57,7 @@ void applyGaussianBlur(const vector<PixelType>& input, vector<PixelType>& output
     }
 }
 
-// --- Stage 2 & 3: Sobel, Magnitude, and Direction ---
-// Added 'use_l2_norm' flag to satisfy Phase 2 requirements
-void applySobelAndMagnitude(const vector<uint8_t>& blurred, vector<uint8_t>& magnitude_out, vector<uint8_t>& direction_out, int width, int height, bool use_l2_norm = false) {
+void applySobelAndMagnitude(const uint8_t* blurred, uint8_t* magnitude_out, uint8_t* direction_out, int width, int height, bool use_l2_norm = false) {
     const int Kx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
     const int Ky[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
 
@@ -81,13 +77,10 @@ void applySobelAndMagnitude(const vector<uint8_t>& blurred, vector<uint8_t>& mag
                 }
             }
 
-            // --- THE PHASE 2 L1/L2 MAGNITUDE FIX ---
             int32_t mag = 0;
             if (use_l2_norm) {
-                // L2 Norm: Euclidean distance (More accurate, but square roots are slow on hardware)
                 mag = static_cast<int32_t>(std::round(std::sqrt(gx * gx + gy * gy)));
             } else {
-                // L1 Norm: Manhattan distance (Fast absolute addition)
                 mag = abs(gx) + abs(gy);
             }
             
@@ -108,22 +101,20 @@ void applySobelAndMagnitude(const vector<uint8_t>& blurred, vector<uint8_t>& mag
     }
 }
 
-// --- Main Execution ---
 int main() {
     const int width = 512;
     const int height = 512;
     const size_t img_size = width * height;
 
-    vector<uint8_t> input_img(img_size);
-    vector<uint8_t> blurred_img(img_size);
-    vector<uint8_t> mag_img_L1(img_size);
-    vector<uint8_t> dir_img_L1(img_size);
-    vector<uint8_t> mag_img_L2(img_size);
-    vector<uint8_t> dir_img_L2(img_size);
+    uint8_t* input_img = (uint8_t*)aligned_alloc(64, img_size * sizeof(uint8_t));
+    uint8_t* blurred_img = (uint8_t*)aligned_alloc(64, img_size * sizeof(uint8_t));
+    uint8_t* mag_img_L1 = (uint8_t*)aligned_alloc(64, img_size * sizeof(uint8_t));
+    uint8_t* dir_img_L1 = (uint8_t*)aligned_alloc(64, img_size * sizeof(uint8_t));
+    uint8_t* mag_img_L2 = (uint8_t*)aligned_alloc(64, img_size * sizeof(uint8_t));
+    uint8_t* dir_img_L2 = (uint8_t*)aligned_alloc(64, img_size * sizeof(uint8_t));
 
     cout << "--- Canny Edge Detection: Phase 2 Scalar Baseline ---" << endl;
 
-    // --- UPDATED: Read from the Results folder ---
     if (!readRawImage("../Results/test_image.raw", input_img, width, height)) {
         cerr << "Program Halt: Initialization Failed." << endl;
         return 1;
@@ -136,15 +127,21 @@ int main() {
     applySobelAndMagnitude(blurred_img, mag_img_L1, dir_img_L1, width, height, false);
     cout << "Sobel Gradients (L1 Norm) applied." << endl;
     
-    // --- UPDATED: Write L1 to the Results folder ---
     writeRawImage("../Results/output_magnitude_L1.raw", mag_img_L1, width, height);
     
     applySobelAndMagnitude(blurred_img, mag_img_L2, dir_img_L2, width, height, true);
     cout << "Sobel Gradients (L2 Norm) applied." << endl;
     
-    // --- UPDATED: Write L2 to the Results folder ---
     writeRawImage("../Results/output_magnitude_L2.raw", mag_img_L2, width, height);
 
     cout << "Pipeline complete. Both L1 and L2 outputs saved to Results folder!" << endl;
+
+    free(input_img);
+    free(blurred_img);
+    free(mag_img_L1);
+    free(dir_img_L1);
+    free(mag_img_L2);
+    free(dir_img_L2);
+
     return 0;
 }
