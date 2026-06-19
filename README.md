@@ -2,7 +2,7 @@
 
 A complete engineering workflow for developing, validating, and preparing a **Canny Edge Detection** application for **RISC-V Vector Extension (RVV)** acceleration.
 
-The project begins with verification of the RVV toolchain and emulation environment, proceeds through implementation of a mathematically correct scalar baseline of the Canny pipeline, and concludes with modular unit testing using Google Test.
+The project begins with verification of the RVV toolchain and emulation environment, proceeds through implementation of a mathematically correct scalar baseline of the Canny pipeline, and concludes with modular unit testing using Google Test. The final phases introduce aggressive compiler optimization profiling, bare-metal RVV intrinsic vectorization, and advanced algorithmic filtering.
 
 The ultimate objective is to establish a trusted baseline before moving toward vectorized acceleration and performance optimization on RISC-V hardware.
 
@@ -10,13 +10,18 @@ The ultimate objective is to establish a trusted baseline before moving toward v
 
 ## Project Overview
 
-This repository is divided into three major phases:
+This repository is divided into several major phases:
 
 | Phase   | Purpose                                                    |
 | ------- | ---------------------------------------------------------- |
 | Phase 1 | Verify RVV compiler, intrinsics, and QEMU vector emulation |
 | Phase 2 | Implement a complete scalar Canny Edge Detection pipeline  |
 | Phase 3 | Validate correctness using automated unit testing          |
+| Phase 4 | Compiler optimization sweep and benchmark timing (-O0 to -O3) |
+| Phase 5 | Profiling and hotspot identification (Amdahl's Law)        |
+| Phase 6 | Bare-metal RVV Intrinsic Optimization (Vectorization)      |
+| Phase 7 | Final Analysis, VLEN Sweeps, and Documentation             |
+| Bonus   | Non-Maximum Suppression (NMS), Hysteresis, and CI/CD Pipeline |
 
 ---
 
@@ -31,10 +36,12 @@ canny-rvv-project/
 ├── Results/
 │   ├── PCB.jpg
 │   ├── test_image.raw
+│   ├── output_final_bonus.raw
 │   ├── output_magnitude_L1.raw
 │   ├── output_magnitude_L2.raw
 │   ├── final_edges_L1.png
-│   └── final_edges_L2.png
+│   ├── final_edges_L2.png
+│   └── final_edges_bonus.png
 │
 ├── scripts/
 │   └── view_output.py
@@ -43,9 +50,10 @@ canny-rvv-project/
     ├── Phase_1.cpp
     ├── rvv_verify.cpp
     ├── Phase_2.cpp
-    └── Phase_3.cpp
-```
-
+    ├── Phase_3.cpp
+    ├── Phase_4_5.cpp
+    ├── Phase_6.cpp
+    └── Phase_bonus.cpp
 ---
 
 ## Project Objectives
@@ -102,6 +110,16 @@ This confirms:
 - Vector arithmetic works
 - Vector stores work
 - RVV instructions execute correctly
+
+
+| Stage | -O0 | -O2 | -O3 | Auto-vec | RVV (VLEN=128) | RVV (VLEN=256) |
+|---|---|---|---|---|---|---|
+| Gaussian 5×5 | 118.491 | 35.882 | 13.094 | 13.423 | 124.453 | 96.773 |
+| Sobel Gx/Gy | 48.914 | 24.862 | 4.375 | 4.163 | 33.889 | 28.783 |
+| Magnitude (L1) | 2.433 | 27.544 | 0.019 | 0.016 | 4.189 | 3.879 |
+| Direction | 5.251 | 69.535 | 3.541 | 3.846 | TBD¹ | TBD¹ |
+| **TOTAL** | **175.089** | **157.822** | **21.029** | **21.448** | **162.530** | **129.435** |
+| Binary size | TBD¹ | TBD¹ | TBD¹ | TBD¹ | TBD¹ | — |
 
 ---
 
@@ -329,6 +347,8 @@ Results/final_edges_L2.png
 ---
 
 ## Compile & Run Phase 2
+
+(optional) add the disared pic in the results folder
 
 Move into the source directory:
 
