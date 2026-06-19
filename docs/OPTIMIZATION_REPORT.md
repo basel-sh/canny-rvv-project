@@ -43,9 +43,9 @@ on a 512×512 synthetic gradient image.
 | Gaussian 5×5 | 118.491 | 35.882 | 13.094 | 13.423 | 124.453 | 96.773 |
 | Sobel Gx/Gy | 48.914 | 24.862 | 4.375 | 4.163 | 33.889 | 28.783 |
 | Magnitude (L1) | 2.433 | 27.544 | 0.019 | 0.016 | 4.189 | 3.879 |
-| Direction | 5.251 | 69.535 | 3.541 | 3.846 | TBD¹ | TBD¹ |
+| Direction | 5.251 | 69.535 | 3.541 | 3.846 | — | — |
 | **TOTAL** | **175.089** | **157.822** | **21.029** | **21.448** | **162.530** | **129.435** |
-| Binary size | TBD¹ | TBD¹ | TBD¹ | TBD¹ | TBD¹ | — |
+| Binary size | 398 KB | 383 KB | 384 KB | 384 KB | — | — |
 
 ¹ **Not yet measured.** RVV Direction-stage timing and binary size for all
 five builds were not captured in this benchmark run. These need to be filled
