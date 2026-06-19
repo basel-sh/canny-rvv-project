@@ -27,4 +27,7 @@ convert_raw_to_png("../Results/output_magnitude_L1.raw", "../Results/final_edges
 # Process the L2 (Euclidean Distance) Output
 convert_raw_to_png("../Results/output_magnitude_L2.raw", "../Results/final_edges_L2.png")
 
+# Bonus:
+convert_raw_to_png("../Results/output_final_bonus.raw", "../Results/final_edges_bonus.png")
+
 print("--- Done ---")

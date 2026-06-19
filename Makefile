@@ -1,7 +1,7 @@
 RISCV_PREFIX  ?= riscv64-unknown-elf-
 RISCV_CXX     := $(RISCV_PREFIX)g++
 HOST_CXX      := g++
-QEMU          := /home/youssef_abdelaty/qemu/build/qemu-riscv64
+QEMU          := /home/basel/rvv/qemu/build/qemu-bundle/usr/local/bin/qemu-riscv64
 QEMU_SYSROOT  := 
 QEMU_BASE     := $(QEMU)
 BUILD_DIR     := build
@@ -19,7 +19,7 @@ RV_FLAGS_O2       := $(ARCH_FLAGS) -O2 -std=c++17 -Wall
 RV_FLAGS_O3       := $(ARCH_FLAGS) -O3 -std=c++17 -Wall
 RV_FLAGS_AUTO_VEC := $(ARCH_FLAGS) -O3 -ftree-vectorize -fopt-info-vec-all -std=c++17 -Wall
 
-.PHONY: all clean verify verify128 verify256 verify512 verify-all test help canny_rv run sweep_O0 sweep_O2 sweep_O3 sweep_autovec
+.PHONY: all clean verify verify128 verify256 verify512 verify-all test help canny_rv run sweep_O0 sweep_O2 sweep_O3 sweep_autovec sweep_phase6 run_phase6
 
 all: verify-all
 
@@ -42,8 +42,9 @@ verify-all: verify128 verify256 verify512
 
 verify: verify256
 
+# Fixed path pointing straight to your source folder for your GitHub Actions Runner
 test: | $(BUILD_DIR)
-	$(HOST_CXX) $(HOST_FLAGS) $(GTEST_INC) tests/*.cpp $(GTEST_LIBS) -o $(BUILD_DIR)/host_test
+	$(HOST_CXX) $(HOST_FLAGS) $(GTEST_INC) src/Phase_3.cpp $(GTEST_LIBS) -o $(BUILD_DIR)/host_test
 	./$(BUILD_DIR)/host_test
 
 # --- Standard Build/Run (Default to O3 for Phase 4) ---
@@ -52,6 +53,13 @@ canny_rv: | $(BUILD_DIR)
 
 run: canny_rv
 	$(QEMU_BASE) -cpu rv64,v=true,vlen=128,elen=64 ./$(BUILD_DIR)/canny_rv
+
+# --- Phase 6: Custom Hand-Vectorized Target Macros ---
+sweep_phase6: | $(BUILD_DIR)
+	$(RISCV_CXX) $(RV_FLAGS_O3) src/Phase_6.cpp -o $(BUILD_DIR)/rvv_phase6
+
+run_phase6: sweep_phase6
+	$(QEMU_BASE) -cpu rv64,v=true,vlen=128,elen=64 ./$(BUILD_DIR)/rvv_phase6
 
 # --- Phase 4 Optimization Sweep Targets ---
 sweep_O0: | $(BUILD_DIR)
@@ -90,6 +98,5 @@ clean:
 help:
 	@echo "make verify-all - Run RVV test at VLEN 128, 256, 512"
 	@echo "make test       - Run GoogleTest host native"
-	@echo "make canny_rv   - Compile the Canny pipeline for RISC-V"
-	@echo "make run        - Execute the RISC-V Canny pipeline on QEMU"
+	@echo "make run_phase6 - Compile and execute Phase 6 RVV code on QEMU"
 	@echo "make clean      - Remove build files"

@@ -1,0 +1,35 @@
+name: Canny Pipeline Host-Side CI
+
+# Trigger this workflow on every git push or pull request to the main branch
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+
+    steps:
+      # 1. Check out your team's repository code onto the runner
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Install native system compilation dependencies and GoogleTest packages
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libgtest-dev
+
+      # 3. Compile GoogleTest system frameworks globally on the runner machine
+      - name: Configure and Build GoogleTest
+        run: |
+          cd /usr/src/googletest
+          sudo cmake .
+          sudo cmake --build . --target install
+
+      # 4. Run your native Makefile rule to compile and execute the test harness
+      - name: Run Host-Side Tests
+        run: |
+          make test
