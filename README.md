@@ -537,3 +537,138 @@ The next stage of the project is to replace the scalar image-processing kernels 
 - Correctness against the validated scalar baseline
 
 This will provide a quantitative evaluation of the benefits of RISC-V Vector Extensions for image-processing workloads.
+
+---
+
+# Phase 4 & 5 — Compiler Optimization Sweep and Profiling
+
+## Purpose
+
+Before writing custom vector instructions, it is critical to understand the limits of the compiler and identify the true bottlenecks in the program. 
+
+**Phase 4 (Compiler Optimization Sweep)** evaluates the performance of the baseline scalar code across different GCC optimization levels (`-O0`, `-O2`, `-O3`) and analyzes the compiler's auto-vectorization capabilities.
+
+**Phase 5 (Profiling)** applies **Amdahl's Law** to determine the percentage of execution time consumed by each stage of the Canny pipeline, identifying the "hotspots" that will yield the highest speedup when manually vectorized.
+
+---
+
+## Key Engineering Techniques Implemented
+
+To ensure highly accurate benchmarking inside the QEMU emulator, several advanced Embedded Systems techniques were utilized:
+
+1. **Direct System Calls (Syscall via `ecall`)**: Bypassed standard C++ timing/I/O libraries that fail or behave inaccurately in QEMU. Instead, direct inline assembly (`ecall`) was used to communicate directly with the host Linux kernel for accurate `clock_gettime(CLOCK_MONOTONIC)` measurements and raw file I/O.
+2. **Memory Alignment**: Image buffers were allocated using `aligned_alloc(64, ...)` to ensure 64-byte alignment, satisfying strict compiler requirements for auto-vectorization and preparing the data structures for Phase 6 RVV intrinsics.
+3. **Iterative Averaging**: Because QEMU is not cycle-accurate, each pipeline stage was placed in a 100-iteration loop. The accumulated wall-clock time was averaged to absorb OS scheduling noise and provide stable benchmarks.
+
+---
+
+## Official Benchmarking Results
+
+After running the automated optimization sweep through QEMU, we collected the following performance metrics. Execution times represent the average wall-clock time per iteration (in milliseconds) over 100 iterations.
+
+| Stage | `-O0` (Baseline) | `-O2` | `-O3` (Max Scalar) | Auto-vectorization |
+| :--- | :--- | :--- | :--- | :--- |
+| **Gaussian 5x5** | 71.3 ms | 22.7 ms | 9.0 ms | 9.0 ms |
+| **Sobel Gx/Gy** | 34.5 ms | 15.3 ms | 2.9 ms | 2.9 ms |
+| **Magnitude (L1)** | 2.1 ms | 12.3 ms | 0.01 ms | 0.01 ms |
+| **Direction** | 4.8 ms | 39.3 ms | 2.7 ms | 2.6 ms |
+| **TOTAL TIME** | **112.6 ms** | **89.6 ms** | **14.6 ms** | **14.5 ms** |
+| **Binary Size** | 110 KB | 109 KB | 110 KB | 110 KB |
+| **Vector Instructions**| 0 | 0 | 0 | 184 |
+
+---
+
+## Engineering Analysis & Profiling (Amdahl's Law)
+
+Based on the collected data, we can draw several critical conclusions before moving to bare-metal RVV programming:
+
+1. **The Power of the Compiler (`-O0` vs `-O3`)**
+   Relying purely on GCC's `-O3` scalar optimizations yielded a massive **~7.7x overall speedup** (from 112.6 ms down to 14.6 ms) without altering a single line of C++ code.
+
+2. **The Failure of Auto-Vectorization**
+   Applying the `-ftree-vectorize` flag successfully forced the compiler to generate **184 vector instructions**. However, the execution time only dropped by a negligible 0.1 ms (from 14.6 ms to 14.5 ms). 
+   *Conclusion:* The compiler struggles to efficiently auto-vectorize complex 2D memory access patterns (like sliding convolution windows). To get true RVV performance, we must write the vector instructions manually.
+
+3. **Hotspot Identification**
+   Looking at the `-O3` baseline profile, we calculated the exact percentage of time spent in each stage:
+   * **Gaussian 5x5:** ~61.6% (9.0 ms)
+   * **Sobel Gx/Gy:** ~19.8% (2.9 ms)
+   * **Direction & Magnitude:** ~18.6% combined
+   
+   *Engineering Decision:* Over **81% of the execution time** is trapped inside the Gaussian and Sobel convolution filters. Therefore, Phase 6 will focus entirely on manually vectorizing these two specific kernels to achieve the highest possible return on investment.
+
+---
+
+## Compile & Run Phase 4 & 5
+
+The benchmarking process is fully automated via the `Makefile`. Move into the root directory of the project:
+
+```bash
+cd canny-rvv-project
+1. Run Baseline (No Optimization)
+
+Bash
+
+
+
+make sweep_O0
+
+2. Run Moderate Optimization
+
+Bash
+
+
+
+make sweep_O2
+
+3. Run Aggressive Optimization
+
+Bash
+
+
+
+make sweep_O3
+
+4. Run Auto-Vectorization Analysis
+
+Bash
+
+
+
+make sweep_autovec
+
+
+PHASE 1
+│
+├── Verify RVV Toolchain
+├── Verify RVV Intrinsics
+└── Verify QEMU RVV Emulation
+│
+▼
+PHASE 2
+│
+├── Load PCB Image
+├── Gaussian Blur
+├── Sobel Gradients
+├── L1 Magnitude
+├── L2 Magnitude
+└── Generate Edge Maps
+│
+▼
+PHASE 3
+│
+├── Unit Testing
+├── Gaussian Validation
+├── Sobel Validation
+└── Magnitude Validation
+│
+▼
+PHASE 4 & 5
+│
+├── Compiler Optimization Sweep (-O0 to -O3)
+├── Auto-Vectorization Analysis
+├── Performance Profiling
+└── Hotspot Identification (Amdahl's Law)
+│
+▼
+READY FOR BARE-METAL RVV OPTIMIZATION (PHASE 6)
