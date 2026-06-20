@@ -118,7 +118,9 @@ void applyGaussianBlur_RVV(const uint8_t* padded_input, uint8_t* output, int wid
                 }
             }
 
-            vint32m4_t v_div = __riscv_vdiv_vx_i32m4(v_sum, kernel_sum, vl);
+           // Replace slow hardware division with fast multiply and right shift: (sum * 240) >> 16
+            vint32m4_t v_mult = __riscv_vmul_vx_i32m4(v_sum, 240, vl);
+            vint32m4_t v_div = __riscv_vsra_vx_i32m4(v_mult, 16, vl);
             vint16m2_t v_out16 = __riscv_vncvt_x_x_w_i16m2(v_div, vl);
             vint8m1_t v_out8_signed = __riscv_vncvt_x_x_w_i8m1(v_out16, vl);
             vuint8m1_t v_out8 = __riscv_vreinterpret_v_i8m1_u8m1(v_out8_signed);
