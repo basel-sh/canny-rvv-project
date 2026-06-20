@@ -30,4 +30,7 @@ convert_raw_to_png("../Results/output_magnitude_L2.raw", "../Results/final_edges
 # Bonus:
 convert_raw_to_png("../Results/output_final_bonus.raw", "../Results/final_edges_bonus.png")
 
+#Phase_6 optimization
+convert_raw_to_png("../Results/output_magnitude_phase6.raw", "../Results/final_edges_phase6.png")
+
 print("--- Done ---")
