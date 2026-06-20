@@ -118,11 +118,11 @@ void applyGaussianBlur_RVV(const uint8_t* padded_input, uint8_t* output, int wid
                 }
             }
 
+
             // old division
             // vint32m4_t v_div = __riscv_vdiv_vx_i32m4(v_sum, kernel_sum, vl);
             // Multiply all sums in the vector by 240 (65536 / 273 ≈ 240)
             vint32m4_t v_mul = __riscv_vmul_vx_i32m4(v_sum, 240, vl);
-
             // Bit-shift right by 16 spaces (equivalent to dividing by 65536)
             vint32m4_t v_div = __riscv_vsra_vx_i32m4(v_mul, 16, vl);
             vint16m2_t v_out16 = __riscv_vncvt_x_x_w_i16m2(v_div, vl);
